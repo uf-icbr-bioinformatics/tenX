@@ -1,0 +1,73 @@
+```{css, echo=FALSE}
+table {
+  width: 80%;
+  margin: autxbo;
+  border-top: 1px solid #666;
+  border-bottom: 1px solid #666;
+}
+table thead th { border-bottom: 1px solid #ddd; }
+th, td { padding: 5px; }
+thead, tfoot, tr:nth-child(even) { background: #eee; }
+```
+
+## Integration and differential analysis
+
+```{r, step1, include=FALSE, echo=FALSE, results='hide'}
+source(params$funcs)
+library(knitr)
+combined = integrated_analysis(params$sample1, params$sample2, resolution=params$resolution, maxmt=params$maxmt, mtpatt=params$mtpatt, logfc=params$logfc, outdir="diff/")
+cluster_counts = t(table(combined$orig.ident, Idents(combined)))
+# Convert to percentages
+for (row in 1:nrow(cluster_counts)) {
+    cluster_counts[row,] = 100.0 * cluster_counts[row,]/sum(cluster_counts[row,])
+}
+rownames(cluster_counts) = 1:nrow(cluster_counts)
+cluster_counts = cbind(cluster_counts, cluster_counts[,1] - cluster_counts[,2])
+colnames(cluster_counts)[3] = "Diff"
+cluster_counts = cluster_counts[order(cluster_counts[,3], decreasing=TRUE),]
+```
+
+Samples <B>`r params$sample1`</B> and <B>`r params$sample2`</B> were integrated, and clustering was performed
+on the combined dataset. The following plots show the distribution of clusters in the integrated dataset.
+
+
+```{r, step2, echo=FALSE}
+combined
+DimPlot(combined, reduction = "umap", group.by = "orig.ident", repel=TRUE, shuffle="TRUE")
+DimPlot(combined, reduction = "umap", label = TRUE, repel = TRUE)
+```
+
+The following table shows the percent of cells from each sample in each cluster.
+```{r, step3, echo=FALSE}
+kable(cluster_counts, "html", caption="Percentage of cells from the two conditions in each cluster.", digits=1)
+```
+
+```{r, step4, include=FALSE, echo=FALSE}
+results = diff_analysis(combined, params$sample1, params$sample2, outdir="diff/")
+filenames = results[[1]]
+zipfilename = paste(params$sample1, "vs", params$sample2, "zip", sep=".")
+cmdline = paste("zip", zipfilename, paste(filenames, collapse=" "))
+system(cmdline)
+```
+
+### Differential analysis by cluster
+
+Download zip file containing all differentially expressed genes in each cluster: <B><A href="`r zipfilename`">`r zipfilename`</A></B>.
+
+```{r, step5, echo=FALSE, results='asis'}
+for (i in 1:length(filenames)) {
+  f = filenames[[i]]
+  m = read.table(f)
+  m = m[c("avg_log2FC", "p_val")]
+  m1 = filter(m, avg_log2FC > 0 & p_val < params$pvalue)
+  m1 = m1[order(-m1$avg_log2FC),]
+  top = head(m1, 10)
+  print(kable(top, "html", caption=paste("Top 10 overexpressed genes in <B>cluster ", i, "</B>")))
+
+  m2 = filter(m, avg_log2FC < 0 & p_val < params$pvalue)
+  m2 = m2[order(m2$avg_log2FC),]
+  bot = head(m2, 10)
+  print(kable(bot, "html", caption=paste("Top 10 underexpressed genes in <B>cluster ", i, "</B>")))
+}
+```
+

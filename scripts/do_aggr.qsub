@@ -1,0 +1,23 @@
+#!/bin/bash
+
+#SBATCH --time=30:00:00
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem-per-cpu=16G
+
+## Call cellranger aggr
+## arg1 = Output directory
+## arg2 = Sample sheet
+
+## Sample sheet example:
+## library_id,molecule_h5
+## PBMC_1,PBMC_1/outs/molecule_info.h5
+## PBMC_3,PBMC_3/outs/molecule_info.h5
+## PBMC_2,PBMC_2/outs/molecule_info.h5
+
+module purge
+module load cellranger${CELLRANGER_VERSION}
+
+cellranger aggr --id=$1 --csv=$2 --localcores=8
+

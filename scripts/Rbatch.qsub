@@ -1,0 +1,13 @@
+#!/bin/bash
+
+#SBATCH --time=10:00:00
+#SBATCH --mem=30gb
+#SBATCH --nodes=1
+#SBATCH --tasks=1
+
+## Run an R script using Rscript
+
+module purge
+module load R${R_VERSION}
+
+Rscript $*

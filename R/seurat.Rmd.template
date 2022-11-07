@@ -1,0 +1,125 @@
+## Initialization
+
+```{r include=FALSE, echo=FALSE, results='hide'}
+source(params$funcs)
+library(knitr)
+```
+
+# Seurat
+
+We analyzed sample ``r params$sample`` from directory ``r params$data_dir``. Input dataset:
+
+```{r}
+data = rs_load10Xrun(params$data_dir, project=params$sample)
+data
+```
+
+## Pre-processing
+
+The following violin plot shows the distribution of the number of genes, counts, and percentage
+of mitochondrial reads in all cells.
+
+```{r echo=FALSE}
+data[["percent.mt"]] = PercentageFeatureSet(data, pattern=params$mtpatt)
+VlnPlot(data, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size = 0)
+cellsbefore = dim(data)[2]
+data = subset(data, subset = nFeature_RNA > params$mingenes & nFeature_RNA < params$maxgenes & percent.mt < params$maxmt)
+cellsafter = dim(data)[2]
+```
+
+We filtered the dataset to remove cells with fewer than `r params$mingenes` or more than `r params$maxgenes`
+genes, and with a proportion of mitochondrial genes higher than `r params$maxmt` percent. The resulting dataset contains `r cellsafter` cells
+(`r round(100.0*cellsafter/cellsbefore, digits=1)`% of the initial number).
+
+The following plots display the relationship between counts and percent mitochondrial
+reads, and number of genes.  
+
+```{r echo=FALSE}
+    plot1 <- FeatureScatter(data, feature1 = "nCount_RNA", feature2 = "percent.mt", pt.size = 1)
+    plot2 <- FeatureScatter(data, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", pt.size = 1)
+    CombinePlots(plots = list(plot1, plot2))
+```
+
+## Normalization and feature selection
+
+After normalization, we identified the ``r params$ntop`` most variable genes. They are:
+    
+```{r echo=FALSE}
+    data = NormalizeData(data, normalization.method = params$method, scale.factor = 10000)
+    data = FindVariableFeatures(data, selection.method = "vst", nfeatures = params$nfeatures)
+
+    # Identify the 10 most highly variable genes
+    topgenes = head(VariableFeatures(data), params$ntop)
+    topgenes
+```
+
+The following chart plots the standardized variance versus the average expression. Outliers
+represents features with high variability (the top `r params$nfeatures` are in red). The
+`r params$ntop` most variable features are labeled.
+
+```{r echo=FALSE, warning=FALSE}
+    LabelPoints(plot = VariableFeaturePlot(data, pt.size = 1), points = topgenes, repel = TRUE)
+```
+
+## PCA and clustering
+
+The following plot displays the first two dimensions of the Principal Component Analysis of
+this dataset.
+
+```{r echo=FALSE, warning=FALSE}
+    all.genes = rownames(data)
+    data = ScaleData(data, features = all.genes)
+    data = RunPCA(data, features = VariableFeatures(object = data))
+    DimPlot(data, reduction="pca")
+```
+
+Clustering results displayed using the UMAP method, with `r params$dimensions` dimensions
+and a resolution of `r params$resolution`.
+
+```{r echo=FALSE, warning=FALSE}
+    data <- FindNeighbors(data, dims = 1:params$dimensions)
+    data <- FindClusters(data, resolution = params$resolution)
+    nclusters = length(unique(Idents(data)))
+
+    print(kable(table(Idents(data)), caption="Number of cells in each cluster"))
+
+    data <- RunUMAP(data, dims = 1:params$dimensions)
+    # note that you can set label = TRUE or use the LabelClusters function to help label
+    # individual clusters
+    DimPlot(data, reduction = "umap")
+    write.table(Idents(data), file=paste(Project(data), "idents.csv", sep="."), quote=FALSE, sep='\t')
+```
+
+Clustering results displayed using the t-SNE method:
+
+```{r echo=FALSE, warning=FALSE}    
+    data <- RunTSNE(data)
+    # consider adding: label=TRUE
+    DimPlot(data, reduction = "tsne")
+
+    rdsfile = paste(Project(data), "rds", sep=".")
+    saveRDS(data, file = rdsfile)
+
+```
+
+These results were saved to results saved to **[`r rdsfile`](`r rdsfile`)**.  This file can be imported into R using the readRDS() function.
+
+## Identification of marker genes
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+    data.markers <- FindAllMarkers(data, only.pos = TRUE, min.pct = params$minpct, logfc.threshold = params$logfc)
+    data.markers %>% group_by(cluster) %>% top_n(n = 2, wt = avg_log2FC)
+    markersfile = paste(Project(data), "markers", "csv", sep=".")
+    write.table(data.markers, file=markersfile, sep='\t', quote=FALSE, col.names=NA, row.names=TRUE)
+```
+
+Marker genes for this sample saved to **[`r markersfile`](`r markersfile`)**. This is a tab-delimited file that can be opened with Excel.
+The following tables list the top `r params$ntop` marker genes for each cluster.
+
+```{r echo=FALSE, warning=FALSE, results='asis'}
+    for (i in 0:(nclusters-1)) {
+      m = subset(data.markers, subset = cluster == i)
+      print(kable(m[1:params$ntop,], caption = paste("Top ", params$ntop, " marker genes for cluster ", i)))
+      cat("\n\n")
+    }
+```

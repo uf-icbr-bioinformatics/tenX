@@ -1,0 +1,46 @@
+#!/bin/bash
+
+#SBATCH --time=60:00:00
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=16
+#SBATCH --mem-per-cpu=10G
+
+## Call cellranger count
+## arg1 = Sample name (from sample sheet)
+## arg2 = Organism
+## arg3 = Fastq directory
+## arg4 = Additional options (optional)
+
+module purge
+module load cellranger${CELLRANGER_VERSION}
+
+# Check if $2 is the name of builtin genome reference.
+# If it's not, use $2 as-is (could be path to a custom ref)
+
+SMP=$1
+REF=$2
+OUT=$3
+shift; shift; shift
+
+if [[ -d $REF ]];
+then
+  refdir=$REF
+else
+  refdir=$HPC_CELLRANGER_REF/$REF
+fi
+
+#if [ "$4" == "" ];
+#then
+#  CHEM=""
+#else
+#  CHEM="-c $4"
+#fi
+
+cellranger count \
+  --id=$SMP \
+  --sample=$SMP \
+  --transcriptome=$refdir \
+  --fastqs=$OUT \
+  --localcores=${SLURM_CPUS_PER_TASK} \
+  --disable-ui $*
