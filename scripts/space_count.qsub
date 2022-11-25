@@ -1,0 +1,59 @@
+#!/bin/bash
+
+#SBATCH --time=60:00:00
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=16
+#SBATCH --mem-per-cpu=5G
+
+## Call cellranger count
+## arg1 = Sample name (from sample sheet)
+## arg2 = Slide image file
+## arg3 = Transcriptome reference
+## arg4 = Slide ID (or "-" if unknown)
+## arg5 = Slide area
+## arg6 = Output directory
+## arg7... = additional arguments to spaceranger count
+
+module purge
+module load spaceranger
+
+# Check if $2 is the name of builtin genome reference.
+# If it's not, use $2 as-is (could be path to a custom ref)
+
+SMP=$1
+IMG=$2
+REF=$3
+SLIDE=$4
+AREA=$5
+OUT=$6
+shift 6
+
+if [[ -d $REF ]];
+then
+  refdir=$REF
+else
+  refdir=$HPC_CELLRANGER_REF/$REF
+fi
+
+slideinfo=(${SLIDE//:/ })	# convert slide info to array
+slidename=${slideinfo[0]}
+slidefile=${slideinfo[1]}
+
+if [[ ! -z $slidefile ]];
+then
+  sf="--slidefile $slidefile"
+else
+  sf=""
+fi
+
+#if [ "$4" == "" ];
+#then
+#  CHEM=""
+#else
+#  CHEM="-c $4"
+#fi
+
+spaceranger count --id=$SMP --sample=$SMP --transcriptome=$refdir --fastqs=$OUT --image=$IMG \
+  --slide $slidename $sf --area $AREA \
+  --localcores=16 --disable-ui $*

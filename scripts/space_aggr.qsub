@@ -1,0 +1,17 @@
+#!/bin/bash
+
+#SBATCH --time=60:00:00
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=16
+#SBATCH --mem-per-cpu=5G
+
+module purge
+module load spaceranger
+
+ID=$1
+CSV=$2
+
+spaceranger aggr \
+  --id=${ID} \
+  --csv=${CSV}

@@ -146,12 +146,6 @@ then
     exit 2
 fi
 
-if [ ! -f $TENX_RUN_DIR/RunInfo.xml ];
-then
-    echo "Error: file RunInfo.xml not found - please specify path to a valid Illumina run directory with the -d option."
-    exit 2
-fi
-
 # Let's get started...
 #source /apps/dibig_tools/1.0/lib/sh/utils.sh
 
@@ -164,11 +158,16 @@ then
   echo Using options from: options.txt
 fi
 
-
-
 function step1() {
-  # Call mkfastq
 
+  # Check that we have a valid run directory
+  if [ ! -f $TENX_RUN_DIR/RunInfo.xml ];
+  then
+    echo "Error: file RunInfo.xml not found - please specify path to a valid Illumina run directory with the -d option."
+    exit 2
+  fi
+
+  # Call mkfastq
   echo "Starting step mkfastq."
   rm -fr $TENX_RUN_ID
   $SUBMIT -W $TENX_HOME/scripts/mkfastq.qsub $TENX_RUN_ID $TENX_SAMPLE_SHEET $TENX_RUN_DIR $BM

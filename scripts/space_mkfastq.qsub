@@ -1,0 +1,43 @@
+#!/bin/bash
+
+#SBATCH --time=30:00:00
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=24
+#SBATCH --mem-per-cpu=4G
+
+## Convert BCL files to fastq. Assumes Illumina run dir is current directory.
+## Arg1 = Run ID
+## Arg2 = Sample sheet
+## Arg3 = Run directory
+## Arg4 = Bases mask (optional, default=Y28N*,I8,I91N*)
+##
+## Example sample sheet:
+##
+## L,PBMC_1,SI-GA-A1
+## L,PBMC_2,SI-GA-B1
+## L,PBMC_3,SI-GA-C1
+##
+## where L is either a lane number or '*'.
+
+module purge
+module load spaceranger
+#which bcl2fastq
+
+RUNID=$1
+SSHEET=$2
+RUNDIR=$3
+if [[ -z "$4" ]];
+then
+  BM="Y28N*,I8,Y91N*"
+else
+  BM=$4
+fi
+
+#singularity run spaceranger.img 
+spaceranger mkfastq --run="$RUNDIR" --csv=$SSHEET \
+  --id=$RUNID \
+  --localcores=24 \
+  --localmem=24 \
+  --disable-ui \
+  --use-bases-mask=$BM

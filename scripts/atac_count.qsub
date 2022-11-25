@@ -13,17 +13,34 @@
 ## arg4 = Additional options (optional)
 
 module purge
-module load cellranger${CELLRANGER_VERSION}
+module load cellranger-atac
+
+# Check if $2 is the name of builtin genome reference.
+# If it's not, use $2 as-is (could be path to a custom ref)
 
 SMP=$1
 REF=$2
 OUT=$3
 shift; shift; shift
 
-cellranger count \
+if [[ -d $REF ]];
+then
+  refdir=$REF
+else
+  refdir=$HPC_CELLRANGER_REF/$REF
+fi
+
+#if [ "$4" == "" ];
+#then
+#  CHEM=""
+#else
+#  CHEM="-c $4"
+#fi
+
+cellranger-atac count \
   --id=$SMP \
   --sample=$SMP \
-  --transcriptome=$refdir \
+  --reference=$refdir \
   --fastqs=$OUT \
   --localcores=${SLURM_CPUS_PER_TASK} \
   --disable-ui $*
