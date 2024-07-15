@@ -64,6 +64,6 @@ cellranger mkfastq --run="$RUNDIR" $ssheet \
   --localcores=24 \
   --localmem=24 \
   --disable-ui \
-  --use-bases-mask=$BM
+  --use-bases-mask=$BM \
+  --filter-single-index 
 #  --ignore-dual-index \
-#  --filter-single-index \

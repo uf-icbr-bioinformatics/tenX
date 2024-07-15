@@ -5,14 +5,16 @@ TENX_HOME=/apps/dibig_tools/tenX
 
 # Specify default versions of cellranger and R
 # Note: these should start with "/".
-export CELLRANGER_VERSION="/7.0.1"
-export R_VERSION="/4.0"
+#export CELLRANGER_VERSION="/7.0.1"
+export CELLRANGER_VERSION="/8.0.0"
+export R_VERSION="/4.3"
 
 STEPS=123456
 TENX_RUN_DIR=.
 TENX_RUN_ID=Fastq
 REPORT=Report
 AGGRDIR=Aggregated
+OPTFILE="options.txt"
 # Organism ID
 TENX_ORG=GRCh38
 # Base mask
@@ -21,6 +23,8 @@ BM="Y28N*,I10,I10,Y91N*"
 CHEM=""
 # Differential analysis
 DIFF=""
+# ParseBiosciences support
+PARSE="FALSE"
 
 # If submit is available, use it, otherwise fall back to sbatch
 # Submit is here: 
@@ -34,12 +38,13 @@ fi
 
 function usage() {
 cat <<EOF
-    Usage: run_10x.sh [options] sampleSheet
+  * Usage: run_10x.sh [options] sampleSheet
 
     Options should be specified before the sampleSheeet. Options:
 
      -s S | Perform only the steps specified in the string S. Default: $STEPS
             See below for a description of steps.
+     -v V | Read options from file V (default: options.txt).
      -o O | Specify organism name. Default: $TENX_ORG. Possible values:
             GRCh38, hg19, hg19_and_mm10, mm10, ercc92, Rnor96.
      -d D | Illumina run directory. Should be the path to the directory that
@@ -52,9 +57,10 @@ cat <<EOF
             file X (a tab-delimited file with a pair of sample names in each row).
      -r R | Write final report to folder R. Default: $REPORT.
           | The report folder will be zipped to a zip file with the same name.
+     -p   | Dataset is from ParseBiosciences pipeline (only run steps 4-6).
      -h   | Print this help message.
 
-    Steps:
+  * Steps:
 
      1 | Generate fastq files (cellranger 'mkfastq' tool). Creates the directory
          specified with the -f option and saves fastq files in it.
@@ -68,7 +74,7 @@ cat <<EOF
          and saves HTML and .cloupe files to it, plus an index.html file linking
          all output files in a table. Finally, zips this folder.
 
-    Sample sheet format:
+  * Sample sheet format:
 
     The sample sheet should be a comma-delimited text file, with each line having the
     format 'lane,samplename,barcode'. Example:
@@ -78,16 +84,32 @@ cat <<EOF
      *,PBMC_2,SI-GA-B1
      *,PBMC_3,SI-GA-C1
 
+    Optionally, a fourth column called Condition can be added, to group replicates of
+    the same condition.
+
     Return values:
 
      0 | Pipeline terminated successfully.
      1 | Help message printed.
      2 | Error - missing sample sheet, or RunInfo.xml not found.
 
+
+  * Step-specific options:
+
+    Additional options can be specified in the options.txt file (or the file specified
+    with the -v option). This should be a tab-delimited file in which the first column
+    contains a key and the second column contains the options to be passed to the appropriate
+    process. These keys are currently defined:
+
+    slurm  - used for SLURM job submission
+    count  - passed to cellranger count (step 2)
+    seurat - passed to seurat (steps 4 and 5)
+    diff   - passed to seurat for differential analysis (step 5)
+
 EOF
 }
 
-while getopts "s:r:o:f:d:b:c:x:a:h" opt; do
+while getopts "s:r:o:f:d:b:c:x:a:v:ph" opt; do
     case $opt in
 	s)
 	    STEPS="$OPTARG"
@@ -115,6 +137,12 @@ while getopts "s:r:o:f:d:b:c:x:a:h" opt; do
 	    ;;
 	a)
 	    AGGRDIR="$OPTARG"
+	    ;;
+	v)
+	    OPTFILE="$OPTARG"
+	    ;;
+	p)
+	    PARSE="TRUE"
 	    ;;
 	h)
 	    usage
@@ -153,10 +181,18 @@ SAMPLES=$(grep -i -v ^lane ${TENX_SAMPLE_SHEET} | cut -d , -f 2)
 NSAMPLES=$(grep -i -c -v ^lane ${TENX_SAMPLE_SHEET})
 
 echo $NSAMPLES samples: $SAMPLES
-if [[ -f options.txt ]];
+if [[ -f $OPTFILE ]];
 then
-  echo Using options from: options.txt
+  echo Using options from: $OPTFILE
 fi
+
+if [[ "$PARSE" == "TRUE" ]];
+then
+  PLATFORM="ParseBio"
+else
+  PLATFORM="10X"
+fi
+echo "Running in ${PLATFORM} mode."
 
 function step1() {
 
@@ -178,10 +214,10 @@ function step2() {
   # Call count
 
   OPTS=""
-  if [[ -f options.txt ]];
+  if [[ -f $OPTFILE ]];
   then
-    OPTS=$(grep ^count options.txt | cut -f 2)
-    SLURMOPTS=$(grep ^slurm options.txt | cut -f 2)
+    OPTS=$(grep ^count $OPTFILE | cut -f 2)
+    SLURMOPTS=$(grep ^slurm $OPTFILE | cut -f 2)
   fi
   echo "Starting step count."
   for smp in $SAMPLES;
@@ -239,13 +275,16 @@ function step4() {
     resolution=0.5
     minpct=0.25
     logfc=0.25
+    celldex="FALSE"
+    parse=${PARSE}
 
-    if [[ -f options.txt ]];
+    if [[ -f $OPTFILE ]];
     then
-      vars=$(grep ^seurat options.txt | cut -f 2)
+      vars=$(grep ^seurat $OPTFILE | cut -f 2)
       eval $vars
     fi
 
+    mkdir -p R markers rds
     for smp in $SAMPLES;
     do
 	rmd=${smp}.seurat.Rmd
@@ -259,7 +298,7 @@ params:
   mingenes: ${mingenes}
   maxgenes: ${maxgenes}
   maxmt: ${maxmt}
-  mtpatt: ${mtpatt}
+  mtpatt: "${mtpatt}"
   method: "LogNormalize"
   nfeatures: ${nfeatures}
   ntop: ${ntop}
@@ -267,6 +306,8 @@ params:
   resolution: ${resolution}
   minpct: ${minpct}
   logfc: ${logfc}
+  parse: ${parse}
+  celldex: "${celldex}"
 ---
 
 EOF
@@ -280,6 +321,7 @@ EOF
 function step5() {
     if [[ ! -f "$DIFF" ]];
     then
+	echo "Error: file ${DIFF} does not exist, cannot perform differential analysis."
 	return
     fi
 
@@ -291,16 +333,24 @@ function step5() {
     pvalue=0.05
     resolution=0.5
     mtpatt="^mt-"
-
-    if [[ -f options.txt ]];
+    mincells=50
+    ntop=12
+    parse=${PARSE}
+    celldex="FALSE"
+    
+    if [[ -f $OPTFILE ]];
     then
-      vars=$(grep ^diff options.txt | cut -f 2)
+      vars=$(grep ^seurat $OPTFILE | cut -f 2)
+      eval $vars
+      vars=$(grep ^diff $OPTFILE | cut -f 2)
       eval $vars
     fi
 
-    mkdir -p diff
-    while read smp1 smp2; do
-	rmd=${smp1}.vs.${smp2}.integ.Rmd
+    mkdir -p _diff
+    while read cond1 cond2; do
+	smp1=$($TENX_HOME/scripts/cond_samples.py $TENX_SAMPLE_SHEET $cond1)
+	smp2=$($TENX_HOME/scripts/cond_samples.py $TENX_SAMPLE_SHEET $cond2)
+	rmd=${cond1}.vs.${cond2}.integ.Rmd
 	cat > ${rmd} <<EOF
 ---
 output: html_document
@@ -308,6 +358,8 @@ params:
   funcs: ${TENX_HOME}/R/seuratfuncs.R
   sample1: ${smp1}
   sample2: ${smp2}
+  condition1: ${cond1}
+  condition2: ${cond2}
   mingenes: ${mingenes}
   maxgenes: ${maxgenes}
   maxmt: ${maxmt}
@@ -315,12 +367,24 @@ params:
   resolution: ${resolution}
   logfc: ${logfc}
   pvalue: ${pvalue}
+  mincells: ${mincells}
+  ntop: ${ntop}
+  parse: ${parse}
+  celldex: "${celldex}"
 ---
 EOF
 	cat ${TENX_HOME}/R/integ.Rmd.template >> $rmd
-	$SUBMIT -W ${TENX_HOME}/scripts/Rbatch.qsub ${TENX_HOME}/R/Render.R $rmd &
+	echo $cond1 vs $cond2
+	$SUBMIT -W -o --mem=50G ${TENX_HOME}/scripts/Rbatch.qsub ${TENX_HOME}/R/Render.R $rmd &
     done < ${DIFF}
     wait
+}
+
+function check_seurat() {
+    for smp in $SAMPLES; do
+	if [[ ! -f ${smp}.seurat.html ]]; then return 1; fi
+    done
+    return 0
 }
 
 function write_index() {
@@ -329,7 +393,7 @@ function write_index() {
 <!DOCTYPE html>
 <HTML>
 <HEAD>
-  <TITLE>${REPORT} - 10X Analysis Report</TITLE>
+  <TITLE>${REPORT} - ${PLATFORM} Analysis Report</TITLE>
   <STYLE>
 TABLE {
   border-collapse: collapse;
@@ -346,7 +410,7 @@ TH {
 </HEAD>
 <BODY>
 <CENTER>
-<H1>${REPORT} - 10X Analysis Report</H1>
+<H1>${REPORT} - ${PLATFORM} Analysis Report</H1>
 <BR>
 <H2><I>Quality Control</I></H2>
 <TABLE>
@@ -364,23 +428,32 @@ EOF
       echo "</TR>" >> ${REP}
     done
     ${TENX_HOME}/scripts/getMetrics.py -s $ALLMET > ${REPORT}/metrics_summary.csv
-    echo "<TR><TD><B>Aggregated</B></TD><TD><A href='Aggregated_summary.html' target='${smp}_report'>Aggregated_summary.html</A></TD><TD><A href='Aggregated.cloupe'>Aggregated.cloupe</A></TD><TD colspan=5 align='center'><A href='metrics_summary.csv'><B>Metrics Summary</B></A></TD></TR>" >> ${REP}
+    if [[ "$PLATFORM" == "10X" ]];
+    then
+      echo "<TR><TD><B>Aggregated</B></TD><TD><A href='Aggregated_summary.html' target='${smp}_report'>Aggregated_summary.html</A></TD><TD><A href='Aggregated.cloupe'>Aggregated.cloupe</A></TD><TD colspan=5 align='center'><A href='metrics_summary.csv'><B>Metrics Summary</B></A></TD></TR>" >> ${REP}
+    fi
     cat >> ${REP} <<EOF
 </TABLE>
 <BR><BR>
+EOF
+
+    check_seurat
+    if [[ "$?" == "0" ]]; then
+	cat >> ${REP} <<EOF
 <H2><I>Analysis</I></H2>
 <TABLE>
 <TR><TH>Sample</TH><TH>Seurat Report</TH><TH>Seurat RDS</TH><TH>Marker genes</TH></TR>
 EOF
 
-    for smp in $SAMPLES;
-    do
-      echo "<TR><TD>$smp</TD><TD><A href='${smp}.seurat.html' target='_blank'>${smp}.seurat</A></TD><TD><A href='${smp}.rds' target='_blank'>${smp}.rds</A></TD><TD><A href='${smp}.markers.xlsx' target='_blank'>${smp}.markers.xlsx</A></TD></TR>" >> ${REP}
-    done
+	for smp in $SAMPLES;
+	do
+	    echo "<TR><TD>$smp</TD><TD><A href='${smp}.seurat.html' target='_blank'>${smp}.seurat</A></TD><TD><A href='${smp}.rds' target='_blank'>${smp}.rds</A></TD><TD><A href='${smp}.markers.xlsx' target='_blank'>${smp}.markers.xlsx</A></TD></TR>" >> ${REP}
+	done
 
-    echo "</TABLE>" >> ${REP}
-
-    if [[ $STEPS == *5* ]];
+	echo "</TABLE>" >> ${REP}
+    fi
+    
+    if [[ $DIFF ]];
     then
 	cat >>${REP} <<EOF
 <BR><BR>
@@ -395,7 +468,7 @@ EOF
 	    zip="${test}.vs.${ctrl}.zip"
 	    nclust=$(unzip -Z -1 $zip | wc -l)
 	    cp -v $report $zip ${REPORT}
-	    ${TENX_HOME}/scripts/markers.py $markers ${REPORT}/$markerx
+	    ${TENX_HOME}/scripts/markers.py _diff/$markers ${REPORT}/$markerx
 	    echo "<TR><TD align='center'>$test</TD><TD align='center'>$ctrl</TD><TD><A href='${report}' target='_blank'>${report}</A></TD><TD align='right'>${nclust}</TD><TD><A href='${markerx}' target='_blank'>${markerx}</A></TD><TD><A href='${zip}' target='_blank'>${zip}</A></TD></TR>" >> ${REP}
 	done < $DIFF
 	echo "</TABLE>" >> ${REP}
@@ -418,8 +491,10 @@ function step6() {
     do
 	cp -v $smp/outs/cloupe.cloupe ${REPORT}/${smp}.cloupe
 	cp -v $smp/outs/web_summary.html ${REPORT}/${smp}_summary.html
-	cp -v ${smp}.seurat.html ${smp}.rds ${REPORT}
-	${TENX_HOME}/scripts/markers.py ${smp}.markers.csv ${REPORT}/${smp}.markers.xlsx
+	if [[ -f ${smp}.seurat.html ]]; then
+	    cp -v ${smp}.seurat.html ${smp}.rds ${REPORT}
+	    ${TENX_HOME}/scripts/markers.py ${smp}.markers.csv ${REPORT}/${smp}.markers.xlsx
+	fi
     done
     write_index
     zip -r ${REPORT}.zip ${REPORT}/

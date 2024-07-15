@@ -7,7 +7,10 @@
 
 ## Run an R script using Rscript
 
-module purge
-module load R${R_VERSION}
+#module purge
+#module load R${R_VERSION}
+
+module load conda
+mamba activate /apps/dibig_tools/tenX/Seurat4
 
 Rscript $*

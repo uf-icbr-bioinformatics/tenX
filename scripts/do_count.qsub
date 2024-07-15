@@ -23,7 +23,8 @@ shift; shift; shift
 cellranger count \
   --id=$SMP \
   --sample=$SMP \
-  --transcriptome=$refdir \
+  --transcriptome=$REF \
   --fastqs=$OUT \
+  --create-bam=false \
   --localcores=${SLURM_CPUS_PER_TASK} \
   --disable-ui $*

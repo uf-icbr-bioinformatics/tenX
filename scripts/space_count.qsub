@@ -21,13 +21,17 @@ module load spaceranger
 # Check if $2 is the name of builtin genome reference.
 # If it's not, use $2 as-is (could be path to a custom ref)
 
-SMP=$1
-IMG=$2
-REF=$3
+PARAMS=$1
+SMP=$2
+IMG=$3
 SLIDE=$4
 AREA=$5
 OUT=$6
 shift 6
+OTHERARGS=$*
+
+source $PARAMS
+REF=$GENOME
 
 if [[ -d $REF ]];
 then
@@ -47,6 +51,11 @@ else
   sf=""
 fi
 
+if [[ -v PANEL ]];
+then
+    probeset="--probe-set $PANEL"
+fi
+
 #if [ "$4" == "" ];
 #then
 #  CHEM=""
@@ -55,5 +64,5 @@ fi
 #fi
 
 spaceranger count --id=$SMP --sample=$SMP --transcriptome=$refdir --fastqs=$OUT --image=$IMG \
-  --slide $slidename $sf --area $AREA \
-  --localcores=16 --disable-ui $*
+  --slide $slidename $sf --area $AREA $probeset \
+  --localcores=16 --disable-ui $OTHERARGS

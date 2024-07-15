@@ -7,7 +7,7 @@ TENX_HOME=/apps/dibig_tools/tenX
 # Note: these should start with "/".
 export R_VERSION="/4.0"
 
-STEPS=12345
+STEPS=1235
 TENX_RUN_DIR=.
 TENX_RUN_ID=Fastq
 REPORT=Report
@@ -279,40 +279,29 @@ EOF
 EOF
 }
 
-function step6() {
+function step5() {
     echo "Create output directory."
     rm -fr ${REPORT}
     mkdir ${REPORT}
-    cp -v Aggregated/outs/count/cloupe.cloupe ${REPORT}/Aggregated.cloupe
+    cp -v Aggregated/outs/cloupe.cloupe ${REPORT}/Aggregated.cloupe
     cp -v Aggregated/outs/web_summary.html ${REPORT}/Aggregated_summary.html
     for smp in $SAMPLES; 
     do
 	cp -v $smp/outs/cloupe.cloupe ${REPORT}/${smp}.cloupe
 	cp -v $smp/outs/web_summary.html ${REPORT}/${smp}_summary.html
-	cp -v ${smp}.seurat.html ${smp}.rds ${REPORT}
-	${TENX_HOME}/scripts/markers.py ${smp}.markers.csv ${REPORT}/${smp}.markers.xlsx
+	# cp -v ${smp}.seurat.html ${smp}.rds ${REPORT}
+	# ${TENX_HOME}/scripts/markers.py ${smp}.markers.csv ${REPORT}/${smp}.markers.xlsx
     done
     write_index
     zip -r ${REPORT}.zip ${REPORT}/
     echo "Report created."
 }
 
-# Clean environment
-#loaded_modules="$(module -t --redirect list)"
-#module purge
-#module load dibig_tools
-
-module load python/3
-
-rm -f *.done
+# Main
 
 if [[ $STEPS == *1* ]]; then step1; fi
 if [[ $STEPS == *2* ]]; then step2; fi
 if [[ $STEPS == *3* ]]; then step3; fi
-if [[ $STEPS == *4* ]]; then step4; fi
 if [[ $STEPS == *5* ]]; then step5; fi
-if [[ $STEPS == *6* ]]; then step6; fi
-
-#module load "$loaded_modules"
 
 exit 0

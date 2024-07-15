@@ -15,59 +15,97 @@ thead, tfoot, tr:nth-child(even) { background: #eee; }
 ```{r, step1, include=FALSE, echo=FALSE, results='hide'}
 source(params$funcs)
 library(knitr)
-combined = integrated_analysis(params$sample1, params$sample2, resolution=params$resolution, maxmt=params$maxmt, mtpatt=params$mtpatt, logfc=params$logfc, outdir="diff/")
-cluster_counts = t(table(combined$orig.ident, Idents(combined)))
-# Convert to percentages
+integ = integrated_analysis(params$sample1, params$sample2, resolution=params$resolution, mingenes=params$mingenes, maxgenes=params$maxgenes, maxmt=params$maxmt, mtpatt=params$mtpatt, logfc=params$logfc, outdir="_diff/", condition1=params$condition1, condition2=params$condition2, parse=params$parse)
+
+combined = integ$combined
+markersfile = integ$markersfile
+
+# Determine number of cells in each cluster for each sample
+sample_counts = t(table(combined$Sample, Idents(combined)))
+sample_counts = rbind(sample_counts, colSums(sample_counts))
+
+# Determine number of cells in each cluster for each condition
+cluster_counts = t(table(combined$Condition, Idents(combined)))
+cluster_counts2 = cluster_counts
+
+# Convert cluster_counts to percentages and add column with difference
 for (row in 1:nrow(cluster_counts)) {
     cluster_counts[row,] = 100.0 * cluster_counts[row,]/sum(cluster_counts[row,])
 }
-rownames(cluster_counts) = 1:nrow(cluster_counts)
 cluster_counts = cbind(cluster_counts, cluster_counts[,1] - cluster_counts[,2])
 colnames(cluster_counts)[3] = "Diff"
-cluster_counts = cluster_counts[order(cluster_counts[,3], decreasing=TRUE),]
+
+# Convert cluster_counts2 to percentages
+for (col in 1:ncol(cluster_counts2)) {
+  cluster_counts2[,col] = 100.0 * cluster_counts2[,col]/sum(cluster_counts2[,col])
+}
 ```
 
-Samples <B>`r params$sample1`</B> and <B>`r params$sample2`</B> were integrated, and clustering was performed
+Conditions <B>`r params$condition1`</B> (samples: <b>`r params$sample1`</B>) and <B>`r params$condition2`</B> (samples: <b>`r params$sample2`</B>) were integrated, and clustering was performed
 on the combined dataset. The following plots show the distribution of clusters in the integrated dataset.
 
-
-```{r, step2, echo=FALSE}
+```{r, step2, echo=FALSE, out.width="120%"}
 combined
-DimPlot(combined, reduction = "umap", group.by = "orig.ident", repel=TRUE, shuffle="TRUE")
-DimPlot(combined, reduction = "umap", label = TRUE, repel = TRUE)
+DimPlot(combined, reduction = "umap", group.by = "orig.ident", repel=TRUE, shuffle=TRUE) + theme(legend.position="bottom")
+DimPlot(combined, reduction = "umap", label=TRUE, repel=TRUE)
 ```
 
-The following table shows the percent of cells from each sample in each cluster.
+<!--
+// #The following heatmap shows the top differentially expressed genes between the two conditions.// 
+// ##
+// ##```{r, step2b, echo=FALSE, out.width="120%"}
+// ##top10 = integ$markers %>% group_by(cluster) %>% top_n(n=10, wt=avg_log2FC)
+// ##DoHeatmap(combined, group.by = "Condition", features=top10)
+// ##```
+-->
+
+The following tables show the number and percent of cells from each sample or each condition in each cluster.
 ```{r, step3, echo=FALSE}
-kable(cluster_counts, "html", caption="Percentage of cells from the two conditions in each cluster.", digits=1)
+kable(sample_counts, "html", caption="Table 1. Number of cells from each sample in each cluster.")
+
+kable(cluster_counts, "html", caption="Table 2. Percentage of cells from the two conditions in each cluster. If the difference is positive, the cluster contains a majority of cells from the first condition, and from the second condition otherwise.", digits=1)
+
+kable(cluster_counts2, "html", caption="Table 3. Percentage of cells in each cluster over the total for each condition.", digits=1)
+
 ```
 
-```{r, step4, include=FALSE, echo=FALSE}
-results = diff_analysis(combined, params$sample1, params$sample2, outdir="diff/")
-filenames = results[[1]]
-zipfilename = paste(params$sample1, "vs", params$sample2, "zip", sep=".")
-cmdline = paste("zip", zipfilename, paste(filenames, collapse=" "))
-system(cmdline)
+## Identification of marker genes
+
+Marker genes for this sample saved to **[`r markersfile`](`r markersfile`)**. This is a tab-delimited file that can be opened with Excel.
+The following tables list the top `r params$ntop` marker genes for each cluster.
+
+```{r echo=FALSE, warning=FALSE, results='asis'}
+    rs_writeMarkers(integ$markers, length(integ$clusternames), params$ntop)
 ```
 
 ### Differential analysis by cluster
+
+```{r, step4, include=FALSE, echo=TRUE, message=TRUE}
+results = diff_analysis(combined, params$condition1, params$condition2, outdir="_diff/", mincells=params$mincells)
+filenames = results[[1]]
+clustids = results[[3]]
+zipfilename = paste(params$condition1, "vs", params$condition2, "zip", sep=".")
+cmdline = paste("zip", zipfilename, paste(filenames, collapse=" "))
+system(cmdline)
+```
 
 Download zip file containing all differentially expressed genes in each cluster: <B><A href="`r zipfilename`">`r zipfilename`</A></B>.
 
 ```{r, step5, echo=FALSE, results='asis'}
 for (i in 1:length(filenames)) {
   f = filenames[[i]]
+  c = clustids[[i]]
   m = read.table(f)
   m = m[c("avg_log2FC", "p_val")]
   m1 = filter(m, avg_log2FC > 0 & p_val < params$pvalue)
   m1 = m1[order(-m1$avg_log2FC),]
   top = head(m1, 10)
-  print(kable(top, "html", caption=paste("Top 10 overexpressed genes in <B>cluster ", i, "</B>")))
+  print(kable(top, "html", caption=paste("Top 10 overexpressed genes in <B>cluster ", c, "</B>")))
 
   m2 = filter(m, avg_log2FC < 0 & p_val < params$pvalue)
   m2 = m2[order(m2$avg_log2FC),]
   bot = head(m2, 10)
-  print(kable(bot, "html", caption=paste("Top 10 underexpressed genes in <B>cluster ", i, "</B>")))
+  print(kable(bot, "html", caption=paste("Top 10 underexpressed genes in <B>cluster ", c, "</B>")))
 }
 ```
 

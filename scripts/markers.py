@@ -2,6 +2,7 @@
 
 import sys
 import csv
+import os.path
 import xlsxwriter
 
 HEADER = ["Gene", "avg_log2FC", "p_val_adj", "pct.1", "pct.2"]
@@ -22,6 +23,10 @@ def store_row(ws, wr, row):
     ws.write(wr, 4, row[4])
 
 def main(matrixfile, xlsxfile):
+    if not os.path.isfile(matrixfile):
+        sys.stderr.write("Error: input file {} not found.\n".format(matrixfile))
+        sys.exit(1)
+
     sys.stderr.write("{} => {}\n".format(matrixfile, xlsxfile))
     workbook = xlsxwriter.Workbook(xlsxfile, {'strings_to_numbers': True})
     try:
