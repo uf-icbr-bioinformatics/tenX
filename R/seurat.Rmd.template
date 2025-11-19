@@ -78,7 +78,10 @@ and a resolution of `r params$resolution`.
 ```{r, echo=FALSE, warning=FALSE, results='asis'}
 DimPlot(data, reduction = "umap", label=TRUE) + theme(legend.position = "bottom")
 if (params$celldex != FALSE) {
-  DimPlot(data, reduction = "umap", label=TRUE, group.by="cell.clabels.main") + theme(legend.position = "bottom")
+  DimPlot(data, reduction = "umap", label=TRUE, group.by="cell.clabels.main")
+}
+if (params$celldex != FALSE) {
+  DimPlot(data, reduction = "umap", label=TRUE, group.by="cell.clabels.fine")
 }
 ```
 
@@ -87,7 +90,10 @@ Clustering results displayed using the t-SNE method:
 ```{r, echo=FALSE, warning=FALSE}    
 DimPlot(data, reduction = "tsne", label=TRUE) + theme(legend.position = "bottom")
 if (params$celldex != FALSE) {
-  DimPlot(data, reduction = "tsne", label=TRUE, group.by = "cell.clabels.main") + theme(legend.position = "bottom")
+  DimPlot(data, reduction = "tsne", label=TRUE, group.by = "cell.clabels.main")
+}
+if (params$celldex != FALSE) {
+  DimPlot(data, reduction = "tsne", label=TRUE, group.by = "cell.clabels.fine")
 }
 ```
 

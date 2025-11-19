@@ -15,7 +15,7 @@ thead, tfoot, tr:nth-child(even) { background: #eee; }
 ```{r, step1, include=FALSE, echo=FALSE, results='hide'}
 source(params$funcs)
 library(knitr)
-integ = integrated_analysis(params$sample1, params$sample2, resolution=params$resolution, mingenes=params$mingenes, maxgenes=params$maxgenes, maxmt=params$maxmt, mtpatt=params$mtpatt, logfc=params$logfc, outdir="_diff/", condition1=params$condition1, condition2=params$condition2, parse=params$parse)
+integ = integrated_analysis(params, outdir="_diff/")
 
 combined = integ$combined
 markersfile = integ$markersfile
@@ -48,6 +48,8 @@ on the combined dataset. The following plots show the distribution of clusters i
 combined
 DimPlot(combined, reduction = "umap", group.by = "orig.ident", repel=TRUE, shuffle=TRUE) + theme(legend.position="bottom")
 DimPlot(combined, reduction = "umap", label=TRUE, repel=TRUE)
+DimPlot(combined, reduction = "umap", group.by = "cell.clabels.main", label=TRUE, repel=TRUE)
+DimPlot(combined, reduction = "umap", group.by = "cell.clabels.fine", label=TRUE, repel=TRUE)
 ```
 
 <!--
@@ -75,7 +77,7 @@ Marker genes for this sample saved to **[`r markersfile`](`r markersfile`)**. Th
 The following tables list the top `r params$ntop` marker genes for each cluster.
 
 ```{r echo=FALSE, warning=FALSE, results='asis'}
-    rs_writeMarkers(integ$markers, length(integ$clusternames), params$ntop)
+    rs_writeMarkers(integ$markers, length(integ$clusters), params$ntop)
 ```
 
 ### Differential analysis by cluster

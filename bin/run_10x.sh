@@ -130,7 +130,7 @@ while getopts "s:r:o:f:d:b:c:x:a:v:ph" opt; do
 	    BM="$OPTARG"
 	    ;;
 	c)
-	    CHEM="$OPTARG"
+	    CHEM="--chemistry $OPTARG"
 	    ;;
 	x)
 	    DIFF="$OPTARG"
@@ -331,6 +331,7 @@ function step5() {
     maxmt=5
     logfc=0.25
     pvalue=0.05
+    dimensions=10
     resolution=0.5
     mtpatt="^mt-"
     mincells=50
@@ -365,6 +366,7 @@ params:
   maxmt: ${maxmt}
   mtpatt: ${mtpatt}
   resolution: ${resolution}
+  dimensions: ${dimensions}
   logfc: ${logfc}
   pvalue: ${pvalue}
   mincells: ${mincells}
@@ -447,7 +449,7 @@ EOF
 
 	for smp in $SAMPLES;
 	do
-	    echo "<TR><TD>$smp</TD><TD><A href='${smp}.seurat.html' target='_blank'>${smp}.seurat</A></TD><TD><A href='${smp}.rds' target='_blank'>${smp}.rds</A></TD><TD><A href='${smp}.markers.xlsx' target='_blank'>${smp}.markers.xlsx</A></TD></TR>" >> ${REP}
+	    echo "<TR><TD>$smp</TD><TD><A href='${smp}.seurat.html' target='_blank'>${smp}.seurat</A></TD><TD><A href='rds/${smp}.rds' target='_blank'>${smp}.rds</A></TD><TD><A href='${smp}.markers.xlsx' target='_blank'>${smp}.markers.xlsx</A></TD></TR>" >> ${REP}
 	done
 
 	echo "</TABLE>" >> ${REP}
@@ -468,7 +470,7 @@ EOF
 	    zip="${test}.vs.${ctrl}.zip"
 	    nclust=$(unzip -Z -1 $zip | wc -l)
 	    cp -v $report $zip ${REPORT}
-	    ${TENX_HOME}/scripts/markers.py _diff/$markers ${REPORT}/$markerx
+	    ${TENX_HOME}/scripts/markers.py $markers ${REPORT}/$markerx
 	    echo "<TR><TD align='center'>$test</TD><TD align='center'>$ctrl</TD><TD><A href='${report}' target='_blank'>${report}</A></TD><TD align='right'>${nclust}</TD><TD><A href='${markerx}' target='_blank'>${markerx}</A></TD><TD><A href='${zip}' target='_blank'>${zip}</A></TD></TR>" >> ${REP}
 	done < $DIFF
 	echo "</TABLE>" >> ${REP}
@@ -484,7 +486,7 @@ EOF
 function step6() {
     echo "Create output directory."
     rm -fr ${REPORT}
-    mkdir ${REPORT}
+    mkdir -p ${REPORT} ${REPORT}/rds/
     cp -v Aggregated/outs/count/cloupe.cloupe ${REPORT}/Aggregated.cloupe
     cp -v Aggregated/outs/web_summary.html ${REPORT}/Aggregated_summary.html
     for smp in $SAMPLES; 
@@ -492,8 +494,9 @@ function step6() {
 	cp -v $smp/outs/cloupe.cloupe ${REPORT}/${smp}.cloupe
 	cp -v $smp/outs/web_summary.html ${REPORT}/${smp}_summary.html
 	if [[ -f ${smp}.seurat.html ]]; then
-	    cp -v ${smp}.seurat.html ${smp}.rds ${REPORT}
-	    ${TENX_HOME}/scripts/markers.py ${smp}.markers.csv ${REPORT}/${smp}.markers.xlsx
+	    cp -v ${smp}.seurat.html ${REPORT}
+	    cp -v rds/${smp}.rds ${REPORT}/rds/
+	    ${TENX_HOME}/scripts/markers.py markers/${smp}.markers.csv ${REPORT}/${smp}.markers.xlsx
 	fi
     done
     write_index

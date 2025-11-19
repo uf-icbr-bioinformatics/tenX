@@ -151,12 +151,20 @@ make_seurat_object_parse <- function(name, path) {
     return(so)
 }
 
+
+#
+#
+#integrated_analysis v 20240715
+#
+#
 # integrated_analysis <- function(smp1, smp2, plots=TRUE, resolution=0.25, logfc=0.25, mtpatt="^mt:",
 #                                 maxmt=5, outdir="",
 #                                 mingenes=500, maxgenes=5000, condition1=FALSE, condition2=FALSE, parse=FALSE) {
-#   
-integrated_analysis <- function(params, outdir="") {
+#
+integrated_analysis <- function(params, outdir="", classify.cells=FALSE) {
     #
+    log = c()
+
     smp1<- params$sample1
     smp2<- params$sample2
     condition1<- params$condition1
@@ -171,6 +179,7 @@ integrated_analysis <- function(params, outdir="") {
           smp, mtpatt=params$mtpatt, maxmt=params$maxmt, mingenes=params$mingenes,
           maxgenes=params$maxgenes, condition=condition1, parse=params$parse)
         solist = c(solist, so)
+        log = c(log, paste(smp, "original number of cells:", nrow(so@meta.data)))
     }
     for (smp in unlist(strsplit(smp2, ","))) {
         so = make_seurat_object(
@@ -178,22 +187,27 @@ integrated_analysis <- function(params, outdir="") {
           mingenes=params$mingenes, maxgenes=params$maxgenes, condition=condition2,
           parse=params$parse)
         solist = c(solist, so)
+        log = c(log, paste(smp, "original number of cells:", nrow(so@meta.data)))
     }
     features <- SelectIntegrationFeatures(object.list = solist)
     anchors <- FindIntegrationAnchors(object.list = solist, anchor.features = features)
     combined <- IntegrateData(anchorset = anchors)
 
+    log = c(log, paste("Integrated number of cells:", nrow(combined@meta.data)))
+    
     DefaultAssay(combined) <- "integrated"
 
     # Run the standard workflow for visualization and clustering
     combined <- ScaleData(combined, verbose = FALSE) %>%
         RunPCA(npcs = 30, verbose = FALSE) %>%
-        RunUMAP(reduction = "pca", dims = 1:30) %>%
-        FindNeighbors(reduction = "pca", dims = 1:30) %>%
-        FindClusters(resolution = resolution)
+        RunUMAP(reduction = "pca", dims = 1:params$dimensions) %>%
+        FindNeighbors(reduction = "pca", dims = 1:params$dimensions) %>%
+        FindClusters(resolution = params$resolution)
 
+    log = c(log, paste("Combined number of cells:", nrow(combined@meta.data)))
+    
     cluster.names = sort(unique(Idents(combined)))
-
+    #
     # Save marker genes
     combined.markers <- rs_findMarkers(combined, minpct=0.25, logfc=params$logfc)
     markersfile = paste("markers", "csv", sep=".")
@@ -201,12 +215,14 @@ integrated_analysis <- function(params, outdir="") {
                 sep='\t', quote=FALSE, col.names=NA, row.names=TRUE)
 
     # Save all genes
-    # all.markers <- FindAllMarkers(combined, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0)
-    # all.markers %>% group_by(cluster) %>% top_n(n = 2, wt = avg_log2FC)
-    # markersfile = paste(label, "full", "csv", sep=".")
-    # write.table(all.markers, file=markersfile, sep='\t', quote=FALSE, col.names=NA, row.names=TRUE)
-
+    all.markers <- FindAllMarkers(combined, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0)
+    all.markers %>% group_by(cluster) %>% top_n(n = 2, wt = avg_log2FC)
+    markersfile = paste(label, "markers", "csv", sep=".")
+    write.table(all.markers, file=markersfile, sep='\t', quote=FALSE, col.names=NA, row.names=TRUE)
+    #
+    #
     cluster_counts = t(table(combined$orig.ident, Idents(combined)))
+    #
     # Convert to percentages
     for (row in 1:nrow(cluster_counts)) {
         cluster_counts[row,] = 100.0 * cluster_counts[row,]/sum(cluster_counts[row,])
@@ -214,17 +230,40 @@ integrated_analysis <- function(params, outdir="") {
     write.table(
       cluster_counts, file=paste(label, "counts", "csv", sep="."),
       quote=FALSE, col.names=TRUE, row.names=TRUE)
-    #
+                                        #
     #
     out_list<- list(
       seurat=combined, markers=combined.markers, markersfile=markersfile,
-      clusternames=cluster.names)
-    out_list<- run_singler(params, out_list, by.cell=classify.cells)
+        clusters=cluster.names)
+    #
+    # saveRDS(object=out_list, file=paste(outdir, '/inan.list1.', smp1, '.', smp2, '.rds', sep = ''))
+                                        #
+    
+    if (params$celldex != FALSE) {
+        out_list<- run_singler(params, out_list, by.cell=classify.cells, wanted.assays=c("integrated"))
+    }
+    names(out_list)[names(out_list)=='seurat']<- 'combined'
+    
+    #
+    ##ERRATA 20240716v2
+    saveRDS(object = out_list, file = paste(
+                                   outdir, '/inan.list.', smp1, '.', smp2, '.rds', sep = ''))
+
+    writeLines(log, "integr.log")
+    #
+    #####End of ERRATA 20240716v2
     #
     return(out_list)
-    
+    #
     #return(list(combined=combined, markers=combined.markers, markersfile=markersfile, clusternames=cluster.names))
 }
+
+
+
+
+
+
+
 
 diff_analysis <- function(integ, smp1, smp2, mincells=50, outdir="") {
     filenames = c()
@@ -233,7 +272,7 @@ diff_analysis <- function(integ, smp1, smp2, mincells=50, outdir="") {
     label = paste(outdir, smp1, "_", smp2, sep="")
     DefaultAssay(integ) = "RNA"
     clusters = sort(unique(Idents(integ)))
-    #print(clusters)
+    saveRDS(c(clusters,integ), "res.rds")
     # Add label consisting of condition and cluster number
     integ$clust.sample = paste("clust", Idents(integ), "_", integ$Condition, sep="")
     integ$celltype = Idents(integ)
@@ -357,7 +396,7 @@ seurat_main <- function(params, save.markers=TRUE, save.rds=TRUE, classify.cells
     return(result)
 }
 
-run_singler <- function(params, result, by.cell=FALSE, use.idents=TRUE, idents=FALSE) {
+run_singler <- function(params, result, by.cell=FALSE, use.idents=TRUE, idents=FALSE, wanted.assays=c("RNA")) {
     # Run singleR on a `result' object using parameters from `params'.
     # Assignment of cells to cluster is specified by the idents vector. If use.idents is TRUE,
     # use the Idents slot instead.
@@ -371,7 +410,7 @@ run_singler <- function(params, result, by.cell=FALSE, use.idents=TRUE, idents=F
     # Similarly for fine instead of main.
     
     message(paste("/// Annotating clusters using database:", params$celldex))
-    ds = DietSeurat(result$seurat, assays=c("RNA"), dimreducs=c("umap", "tsne"))
+    ds = DietSeurat(result$seurat, assays=wanted.assays, dimreducs=c("umap", "tsne"))
     sce = as.SingleCellExperiment(ds)
     ref = load_celldex(params$celldex)
     #ref = celldex::DatabaseImmuneCellExpressionData()
